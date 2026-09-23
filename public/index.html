@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Scorebug Control Panel</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #181818; color: #eee; padding-right: 500px; }
+        .panel { background: #262626; padding: 18px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #333; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .sub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .control-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        label { display: block; margin-top: 10px; font-size: 12px; color: #aaa; font-weight: bold; text-transform: uppercase; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 8px; background: #383838; color: white; border: 1px solid #555; border-radius: 4px; box-sizing: border-box; }
+        input[type="range"] { flex-grow: 1; }
+        input[type="file"] { font-size: 11px; margin-top: 4px; }
+        .num-input { width: 70px !important; text-align: center; }
+        input[type="color"] { width: 100%; height: 38px; border: none; background: transparent; cursor: pointer; }
+        button { padding: 10px 14px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        .score-btn { background: #28a745; margin-right: 2px; padding: 6px 10px; }
+        .clock-btn { background: #17a2b8; margin-right: 4px; }
+        .danger-btn { background: #dc3545; }
+        .master-toggle { font-size: 20px; width: 100%; padding: 14px; margin-bottom: 20px; }
+        hr { border: 0; height: 1px; background: #444; margin: 15px 0; }
+        h3 { margin-bottom: 5px; color: #007bff; font-size: 14px; text-transform: uppercase; }
+        .toggle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; background: #1f1f1f; padding: 12px; border-radius: 6px; }
+        .toggle-item { font-size: 11px; font-weight: bold; color: #ccc; }
+
+        /* Floating Preview Panel */
+        .preview-panel {
+            position: fixed; top: 20px; right: 20px; width: 460px;
+            background: #222; border: 2px solid #007bff; border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8); z-index: 9999; overflow: hidden;
+        }
+        .preview-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 12px; background: #2a2a2a; font-size: 12px;
+            font-weight: bold; color: #007bff; border-bottom: 1px solid #333;
+        }
+        .preview-body { height: 160px; background: #111; position: relative; }
+        .preview-body iframe { width: 100%; height: 100%; border: none; background: transparent; }
+        .preview-toggle-btn { padding: 4px 10px; font-size: 11px; background: #444; }
+    </style>
+</head>
+<body>
+
+    <!-- Floating Live Bug Preview -->
+    <div class="preview-panel" id="preview-panel">
+        <div class="preview-header">
+            <span>LIVE OBS PREVIEW</span>
+            <button class="preview-toggle-btn" id="toggle-preview-btn" onclick="togglePreview()">Hide Preview</button>
+        </div>
+        <div class="preview-body" id="preview-body">
+            <iframe src="/bug.html"></iframe>
+        </div>
+    </div>
+
+    <button id="toggle-bug" class="master-toggle danger-btn" onclick="toggleBugMaster()">HIDE BUG ON STREAM</button>
+
+    <!-- Preset Profile Export/Import -->
+    <div class="panel">
+        <h2>Import / Export Settings Profile</h2>
+        <div class="control-row">
+            <button onclick="exportSettings()">Export Profile (.json)</button>
+            <input type="file" id="import-file" accept=".json" onchange="importSettings(event)">
+        </div>
+    </div>
+
+    <!-- Component Visibility Toggles -->
+    <div class="panel">
+        <h2>Component Visibility Toggles</h2>
+        <div class="toggle-grid">
+            <label class="toggle-item"><input type="checkbox" id="vis-clock" checked onchange="emitState()"> Game Clock</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-quarter" checked onchange="emitState()"> Quarter</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-downDist" checked onchange="emitState()"> Down & Distance</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-awayLogo" checked onchange="emitState()"> Away Logo</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-awayName" checked onchange="emitState()"> Away Name</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-awayMascot" checked onchange="emitState()"> Away Mascot</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-awayScore" checked onchange="emitState()"> Away Score</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-awayTimeouts" checked onchange="emitState()"> Away Timeouts</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-homeLogo" checked onchange="emitState()"> Home Logo</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-homeName" checked onchange="emitState()"> Home Name</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-homeMascot" checked onchange="emitState()"> Home Mascot</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-homeScore" checked onchange="emitState()"> Home Score</label>
+            <label class="toggle-item"><input type="checkbox" id="vis-homeTimeouts" checked onchange="emitState()"> Home Timeouts</label>
+        </div>
+    </div>
+    
+    <!-- Clock & Down/Distance Panel -->
+    <div class="panel">
+        <h2>Game State & Live Clock (<span id="clock-status" style="color:#28a745">STOPPED</span>)</h2>
+        <div class="grid">
+            <div>
+                <label>Clock Timer Controls (Current: <b id="live-clock-display">2:33</b>)</label>
+                <div class="control-row" style="margin-bottom: 10px;">
+                    <button class="clock-btn" onclick="startClock()">START</button>
+                    <button class="clock-btn danger-btn" onclick="stopClock()">STOP</button>
+                </div>
+                <div class="control-row">
+                    <input type="number" id="clock-min" placeholder="Min" value="2" style="width: 70px;"> :
+                    <input type="number" id="clock-sec" placeholder="Sec" value="33" style="width: 70px;">
+                    <button onclick="setCustomClock()">Set Time</button>
+                </div>
+            </div>
+            <div>
+                <label>Quarter</label>
+                <select id="quarter" onchange="emitState()">
+                    <option value="1ST">1ST QTR</option>
+                    <option value="2ND">2ND QTR</option>
+                    <option value="HALF">HALFTIME</option>
+                    <option value="3RD">3RD QTR</option>
+                    <option value="4TH">4TH QTR</option>
+                    <option value="OT">OVERTIME</option>
+                    <option value="FINAL">FINAL</option>
+                </select>
+
+                <div class="sub-grid" style="margin-top: 5px;">
+                    <div>
+                        <label>Down</label>
+                        <select id="down" onchange="emitState()">
+                            <option value="1ST">1ST</option>
+                            <option value="2ND">2ND</option>
+                            <option value="3RD">3RD</option>
+                            <option value="4TH">4TH</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Distance</label>
+                        <input type="text" id="distance" value="10" oninput="emitState()">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Font Customization & Font Uploads -->
+    <div class="panel">
+        <h2>Fonts & Typography</h2>
+        <div class="grid">
+            <div>
+                <label>Global Broadcast Font</label>
+                <select id="global-font" class="font-select" onchange="emitState()">
+                    <option value="Teko">Teko (Condensed, Fox Style)</option>
+                    <option value="Roboto">Roboto (Standard Sans)</option>
+                    <option value="Montserrat">Montserrat (Wide Sans)</option>
+                    <option value="Anton">Anton (Heavy Block)</option>
+                    <option value="Oswald">Oswald (Tall & Narrow)</option>
+                </select>
+            </div>
+            <div>
+                <label>Upload Custom Font File (.ttf, .otf, .woff)</label>
+                <input type="file" id="font-file-input" accept=".ttf,.otf,.woff,.woff2" onchange="uploadCustomFont(event)">
+            </div>
+        </div>
+    </div>
+
+    <!-- Teams Grid -->
+    <div class="grid">
+        <!-- Away Team Controls -->
+        <div class="panel">
+            <h2>Away Team</h2>
+            <label>Name</label>
+            <input type="text" id="away-name" value="NEBRASKA" oninput="emitState()">
+            
+            <label>Score (Direct Edit & Quick Buttons)</label>
+            <div class="control-row">
+                <input type="number" id="away-score-num" value="10" style="width: 80px;" oninput="emitState()">
+                <button class="score-btn" onclick="adjustScore('away', 6)">+6</button>
+                <button class="score-btn" onclick="adjustScore('away', 3)">+3</button>
+                <button class="score-btn" onclick="adjustScore('away', 1)">+1</button>
+                <button class="score-btn danger-btn" onclick="adjustScore('away', -1)">-1</button>
+            </div>
+
+            <hr>
+            <h3>Gradients, Colors & Texture</h3>
+            <div class="sub-grid">
+                <div><label>Color 1</label><input type="color" id="away-color1" value="#D00000" onchange="emitState()"></div>
+                <div><label>Color 2</label><input type="color" id="away-color2" value="#800000" onchange="emitState()"></div>
+            </div>
+            <div class="sub-grid">
+                <div><label>Font Color</label><input type="color" id="away-font-color" value="#ffffff" onchange="emitState()"></div>
+                <div>
+                    <label>Gradient Angle</label>
+                    <div class="control-row">
+                        <input type="range" id="away-gradient-angle" min="0" max="360" value="180" oninput="syncDualLocal('away-gradient-angle', 'away-gradient-angle-num')" onchange="emitState()">
+                        <input type="number" id="away-gradient-angle-num" class="num-input" value="180" oninput="syncDualLocal('away-gradient-angle-num', 'away-gradient-angle')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+
+            <label>Team Banner Background Image / Texture</label>
+            <input type="text" id="away-bg-image-url" placeholder="Image URL..." oninput="emitState()">
+            <input type="file" accept="image/*" onchange="uploadImage(event, 'away-bg-image-url')">
+
+            <div class="sub-grid">
+                <div>
+                    <label>Texture Opacity (%)</label>
+                    <div class="control-row">
+                        <input type="range" id="away-bg-opacity" min="0" max="100" value="50" oninput="syncDualLocal('away-bg-opacity', 'away-bg-opacity-num')" onchange="emitState()">
+                        <input type="number" id="away-bg-opacity-num" class="num-input" value="50" oninput="syncDualLocal('away-bg-opacity-num', 'away-bg-opacity')" onchange="emitState()">
+                    </div>
+                </div>
+                <div>
+                    <label>Blend Mode</label>
+                    <select id="away-bg-blend" onchange="emitState()">
+                        <option value="overlay" selected>Overlay</option>
+                        <option value="normal">Normal</option>
+                        <option value="multiply">Multiply</option>
+                        <option value="screen">Screen</option>
+                    </select>
+                </div>
+            </div>
+
+            <hr>
+            <h3>Logo Position & File Upload</h3>
+            <label>Logo URL or Upload Local File</label>
+            <input type="text" id="away-logo" value="" oninput="emitState()">
+            <input type="file" accept="image/*" onchange="uploadImage(event, 'away-logo')">
+
+            <label>Logo Size (px)</label>
+            <div class="control-row">
+                <input type="range" id="away-logo-size" min="20" max="200" value="75" oninput="syncDualLocal('away-logo-size', 'away-logo-size-num')" onchange="emitState()">
+                <input type="number" id="away-logo-size-num" class="num-input" value="75" oninput="syncDualLocal('away-logo-size-num', 'away-logo-size')" onchange="emitState()">
+            </div>
+
+            <label>Logo Tilt (Degrees)</label>
+            <div class="control-row">
+                <input type="range" id="away-logo-tilt" min="-180" max="180" value="0" oninput="syncDualLocal('away-logo-tilt', 'away-logo-tilt-num')" onchange="emitState()">
+                <input type="number" id="away-logo-tilt-num" class="num-input" value="0" oninput="syncDualLocal('away-logo-tilt-num', 'away-logo-tilt')" onchange="emitState()">
+            </div>
+
+            <div class="sub-grid">
+                <div>
+                    <label>Position Offset X</label>
+                    <div class="control-row">
+                        <input type="range" id="away-logo-x" min="-200" max="200" value="-35" oninput="syncDualLocal('away-logo-x', 'away-logo-x-num')" onchange="emitState()">
+                        <input type="number" id="away-logo-x-num" class="num-input" value="-35" oninput="syncDualLocal('away-logo-x-num', 'away-logo-x')" onchange="emitState()">
+                    </div>
+                </div>
+                <div>
+                    <label>Position Offset Y</label>
+                    <div class="control-row">
+                        <input type="range" id="away-logo-y" min="-200" max="200" value="-12" oninput="syncDualLocal('away-logo-y', 'away-logo-y-num')" onchange="emitState()">
+                        <input type="number" id="away-logo-y-num" class="num-input" value="-12" oninput="syncDualLocal('away-logo-y-num', 'away-logo-y')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+            
+            <label style="margin-top: 10px;"><input type="checkbox" id="away-logo-flip" onchange="emitState()"> Flip Horizontal</label>
+
+            <hr>
+            <h3>Sub-Logo Mascot Text</h3>
+            <label>Mascot Text</label>
+            <input type="text" id="away-mascot-text" value="CORNHUSKERS" oninput="emitState()">
+            
+            <label>Mascot Font Family</label>
+            <select id="away-mascot-font" class="font-select" onchange="emitState()">
+                <option value="Teko">Teko (Condensed)</option>
+                <option value="Roboto">Roboto (Clean)</option>
+                <option value="Montserrat">Montserrat (Wide)</option>
+                <option value="Anton">Anton (Heavy Block)</option>
+                <option value="Oswald">Oswald (Tall)</option>
+            </select>
+
+            <div class="sub-grid">
+                <div><label>Text Color</label><input type="color" id="away-mascot-color" value="#ffffff" onchange="emitState()"></div>
+                <div>
+                    <label>Font Size (px)</label>
+                    <div class="control-row">
+                        <input type="range" id="away-mascot-size" min="10" max="60" value="18" oninput="syncDualLocal('away-mascot-size', 'away-mascot-size-num')" onchange="emitState()">
+                        <input type="number" id="away-mascot-size-num" class="num-input" value="18" oninput="syncDualLocal('away-mascot-size-num', 'away-mascot-size')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+
+            <div class="sub-grid">
+                <div>
+                    <label>Text Offset X</label>
+                    <div class="control-row">
+                        <input type="range" id="away-mascot-x" min="-200" max="200" value="-35" oninput="syncDualLocal('away-mascot-x', 'away-mascot-x-num')" onchange="emitState()">
+                        <input type="number" id="away-mascot-x-num" class="num-input" value="-35" oninput="syncDualLocal('away-mascot-x-num', 'away-mascot-x')" onchange="emitState()">
+                    </div>
+                </div>
+                <div>
+                    <label>Text Offset Y</label>
+                    <div class="control-row">
+                        <input type="range" id="away-mascot-y" min="-100" max="200" value="55" oninput="syncDualLocal('away-mascot-y', 'away-mascot-y-num')" onchange="emitState()">
+                        <input type="number" id="away-mascot-y-num" class="num-input" value="55" oninput="syncDualLocal('away-mascot-y-num', 'away-mascot-y')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+
+            <label>Text Tilt (Degrees)</label>
+            <div class="control-row">
+                <input type="range" id="away-mascot-tilt" min="-180" max="180" value="0" oninput="syncDualLocal('away-mascot-tilt', 'away-mascot-tilt-num')" onchange="emitState()">
+                <input type="number" id="away-mascot-tilt-num" class="num-input" value="0" oninput="syncDualLocal('away-mascot-tilt-num', 'away-mascot-tilt')" onchange="emitState()">
+            </div>
+
+            <hr>
+            <label>Timeouts Remaining</label>
+            <select id="away-timeouts" onchange="emitState()">
+                <option value="3">3</option>
+                <option value="2">2</option>
+                <option value="1">1</option>
+                <option value="0">0</option>
+            </select>
+        </div>
+
+        <!-- Home Team Controls -->
+        <div class="panel">
+            <h2>Home Team</h2>
+            <label>Name</label>
+            <input type="text" id="home-name" value="MINNESOTA" oninput="emitState()">
+            
+            <label>Score (Direct Edit & Quick Buttons)</label>
+            <div class="control-row">
+                <input type="number" id="home-score-num" value="3" style="width: 80px;" oninput="emitState()">
+                <button class="score-btn" onclick="adjustScore('home', 6)">+6</button>
+                <button class="score-btn" onclick="adjustScore('home', 3)">+3</button>
+                <button class="score-btn" onclick="adjustScore('home', 1)">+1</button>
+                <button class="score-btn danger-btn" onclick="adjustScore('home', -1)">-1</button>
+            </div>
+
+            <hr>
+            <h3>Gradients, Colors & Texture</h3>
+            <div class="sub-grid">
+                <div><label>Color 1</label><input type="color" id="home-color1" value="#7A0019" onchange="emitState()"></div>
+                <div><label>Color 2</label><input type="color" id="home-color2" value="#FFCC33" onchange="emitState()"></div>
+            </div>
+            <div class="sub-grid">
+                <div><label>Font Color</label><input type="color" id="home-font-color" value="#ffffff" onchange="emitState()"></div>
+                <div>
+                    <label>Gradient Angle</label>
+                    <div class="control-row">
+                        <input type="range" id="home-gradient-angle" min="0" max="360" value="180" oninput="syncDualLocal('home-gradient-angle', 'home-gradient-angle-num')" onchange="emitState()">
+                        <input type="number" id="home-gradient-angle-num" class="num-input" value="180" oninput="syncDualLocal('home-gradient-angle-num', 'home-gradient-angle')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+
+            <label>Team Banner Background Image / Texture</label>
+            <input type="text" id="home-bg-image-url" placeholder="Image URL..." oninput="emitState()">
+            <input type="file" accept="image/*" onchange="uploadImage(event, 'home-bg-image-url')">
+
+            <div class="sub-grid">
+                <div>
+                    <label>Texture Opacity (%)</label>
+                    <div class="control-row">
+                        <input type="range" id="home-bg-opacity" min="0" max="100" value="50" oninput="syncDualLocal('home-bg-opacity', 'home-bg-opacity-num')" onchange="emitState()">
+                        <input type="number" id="home-bg-opacity-num" class="num-input" value="50" oninput="syncDualLocal('home-bg-opacity-num', 'home-bg-opacity')" onchange="emitState()">
+                    </div>
+                </div>
+                <div>
+                    <label>Blend Mode</label>
+                    <select id="home-bg-blend" onchange="emitState()">
+                        <option value="overlay" selected>Overlay</option>
+                        <option value="normal">Normal</option>
+                        <option value="multiply">Multiply</option>
+                        <option value="screen">Screen</option>
+                    </select>
+                </div>
+            </div>
+
+            <hr>
+            <h3>Logo Position & File Upload</h3>
+            <label>Logo URL or Upload Local File</label>
+            <input type="text" id="home-logo" value="" oninput="emitState()">
+            <input type="file" accept="image/*" onchange="uploadImage(event, 'home-logo')">
+
+            <label>Logo Size (px)</label>
+            <div class="control-row">
+                <input type="range" id="home-logo-size" min="20" max="200" value="75" oninput="syncDualLocal('home-logo-size', 'home-logo-size-num')" onchange="emitState()">
+                <input type="number" id="home-logo-size-num" class="num-input" value="75" oninput="syncDualLocal('home-logo-size-num', 'home-logo-size')" onchange="emitState()">
+            </div>
+
+            <label>Logo Tilt (Degrees)</label>
+            <div class="control-row">
+                <input type="range" id="home-logo-tilt" min="-180" max="180" value="0" oninput="syncDualLocal('home-logo-tilt', 'home-logo-tilt-num')" onchange="emitState()">
+                <input type="number" id="home-logo-tilt-num" class="num-input" value="0" oninput="syncDualLocal('home-logo-tilt-num', 'home-logo-tilt')" onchange="emitState()">
+            </div>
+
+            <div class="sub-grid">
+                <div>
+                    <label>Position Offset X</label>
+                    <div class="control-row">
+                        <input type="range" id="home-logo-x" min="-200" max="200" value="-35" oninput="syncDualLocal('home-logo-x', 'home-logo-x-num')" onchange="emitState()">
+                        <input type="number" id="home-logo-x-num" class="num-input" value="-35" oninput="syncDualLocal('home-logo-x-num', 'home-logo-x')" onchange="emitState()">
+                    </div>
+                </div>
+                <div>
+                    <label>Position Offset Y</label>
+                    <div class="control-row">
+                        <input type="range" id="home-logo-y" min="-200" max="200" value="-12" oninput="syncDualLocal('home-logo-y', 'home-logo-y-num')" onchange="emitState()">
+                        <input type="number" id="home-logo-y-num" class="num-input" value="-12" oninput="syncDualLocal('home-logo-y-num', 'home-logo-y')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+            
+            <label style="margin-top: 10px;"><input type="checkbox" id="home-logo-flip" onchange="emitState()"> Flip Horizontal</label>
+
+            <hr>
+            <h3>Sub-Logo Mascot Text</h3>
+            <label>Mascot Text</label>
+            <input type="text" id="home-mascot-text" value="GOLDEN GOPHERS" oninput="emitState()">
+            
+            <label>Mascot Font Family</label>
+            <select id="home-mascot-font" class="font-select" onchange="emitState()">
+                <option value="Teko">Teko (Condensed)</option>
+                <option value="Roboto">Roboto (Clean)</option>
+                <option value="Montserrat">Montserrat (Wide)</option>
+                <option value="Anton">Anton (Heavy Block)</option>
+                <option value="Oswald">Oswald (Tall)</option>
+            </select>
+
+            <div class="sub-grid">
+                <div><label>Text Color</label><input type="color" id="home-mascot-color" value="#FFCC33" onchange="emitState()"></div>
+                <div>
+                    <label>Font Size (px)</label>
+                    <div class="control-row">
+                        <input type="range" id="home-mascot-size" min="10" max="60" value="18" oninput="syncDualLocal('home-mascot-size', 'home-mascot-size-num')" onchange="emitState()">
+                        <input type="number" id="home-mascot-size-num" class="num-input" value="18" oninput="syncDualLocal('home-mascot-size-num', 'home-mascot-size')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+
+            <div class="sub-grid">
+                <div>
+                    <label>Text Offset X</label>
+                    <div class="control-row">
+                        <input type="range" id="home-mascot-x" min="-200" max="200" value="-35" oninput="syncDualLocal('home-mascot-x', 'home-mascot-x-num')" onchange="emitState()">
+                        <input type="number" id="home-mascot-x-num" class="num-input" value="-35" oninput="syncDualLocal('home-mascot-x-num', 'home-mascot-x')" onchange="emitState()">
+                    </div>
+                </div>
+                <div>
+                    <label>Text Offset Y</label>
+                    <div class="control-row">
+                        <input type="range" id="home-mascot-y" min="-100" max="200" value="55" oninput="syncDualLocal('home-mascot-y', 'home-mascot-y-num')" onchange="emitState()">
+                        <input type="number" id="home-mascot-y-num" class="num-input" value="55" oninput="syncDualLocal('home-mascot-y-num', 'home-mascot-y')" onchange="emitState()">
+                    </div>
+                </div>
+            </div>
+
+            <label>Text Tilt (Degrees)</label>
+            <div class="control-row">
+                <input type="range" id="home-mascot-tilt" min="-180" max="180" value="0" oninput="syncDualLocal('home-mascot-tilt', 'home-mascot-tilt-num')" onchange="emitState()">
+                <input type="number" id="home-mascot-tilt-num" class="num-input" value="0" oninput="syncDualLocal('home-mascot-tilt-num', 'home-mascot-tilt')" onchange="emitState()">
+            </div>
+
+            <hr>
+            <label>Timeouts Remaining</label>
+            <select id="home-timeouts" onchange="emitState()">
+                <option value="3">3</option>
+                <option value="2">2</option>
+                <option value="1">1</option>
+                <option value="0">0</option>
+            </select>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let state = { customFonts: [] };
+        let isSyncing = false; // Prevents stateUpdate loops when filling controls
+
+        socket.on('clockTick', (data) => {
+            document.getElementById('live-clock-display').innerText = data.clock;
+            const statusElem = document.getElementById('clock-status');
+            statusElem.innerText = data.isRunning ? "RUNNING" : "STOPPED";
+            statusElem.style.color = data.isRunning ? "#28a745" : "#dc3545";
+        });
+
+        // Server-to-Control Panel sync
+        socket.on('stateUpdate', (newState) => {
+            isSyncing = true;
+            state = newState;
+
+            // Populate custom font dropdown options if new ones exist
+            if (state.customFonts) {
+                state.customFonts.forEach(font => {
+                    document.querySelectorAll('.font-select').forEach(select => {
+                        if (!select.querySelector(`option[value="${font.name}"]`)) {
+                            const opt = document.createElement('option');
+                            opt.value = font.name;
+                            opt.innerText = `Custom: ${font.name}`;
+                            select.appendChild(opt);
+                        }
+                    });
+                });
+            }
+
+            // Global
+            setVal('global-font', state.fontFamily);
+            setVal('quarter', state.quarter);
+            setVal('down', state.down);
+            setVal('distance', state.distance);
+
+            // Bug Master Toggle
+            const bugBtn = document.getElementById('toggle-bug');
+            if (state.visibility && state.visibility.bug !== undefined) {
+                if (state.visibility.bug) {
+                    bugBtn.innerText = "HIDE BUG ON STREAM";
+                    bugBtn.className = "master-toggle danger-btn";
+                } else {
+                    bugBtn.innerText = "SHOW BUG ON STREAM";
+                    bugBtn.className = "master-toggle";
+                }
+            }
+
+            // Visibilities
+            if (state.visibility) {
+                setCheck('vis-clock', state.visibility.clock);
+                setCheck('vis-quarter', state.visibility.quarter);
+                setCheck('vis-downDist', state.visibility.downDist);
+                setCheck('vis-awayLogo', state.visibility.awayLogo);
+                setCheck('vis-awayName', state.visibility.awayName);
+                setCheck('vis-awayMascot', state.visibility.awayMascot);
+                setCheck('vis-awayScore', state.visibility.awayScore);
+                setCheck('vis-awayTimeouts', state.visibility.awayTimeouts);
+                setCheck('vis-homeLogo', state.visibility.homeLogo);
+                setCheck('vis-homeName', state.visibility.homeName);
+                setCheck('vis-homeMascot', state.visibility.homeMascot);
+                setCheck('vis-homeScore', state.visibility.homeScore);
+                setCheck('vis-homeTimeouts', state.visibility.homeTimeouts);
+            }
+
+            // Away
+            if (state.awayTeam) {
+                setVal('away-name', state.awayTeam.name);
+                setVal('away-score-num', state.awayTeam.score);
+                setVal('away-color1', state.awayTeam.color1);
+                setVal('away-color2', state.awayTeam.color2);
+                setVal('away-font-color', state.awayTeam.fontColor);
+                setValDual('away-gradient-angle', 'away-gradient-angle-num', state.awayTeam.gradientAngle);
+                setVal('away-bg-image-url', state.awayTeam.bgImage);
+                setValDual('away-bg-opacity', 'away-bg-opacity-num', state.awayTeam.bgOpacity);
+                setVal('away-bg-blend', state.awayTeam.bgBlendMode || 'overlay');
+                setVal('away-logo', state.awayTeam.logo);
+                setValDual('away-logo-size', 'away-logo-size-num', state.awayTeam.logoSize);
+                setValDual('away-logo-tilt', 'away-logo-tilt-num', state.awayTeam.logoTilt);
+                setValDual('away-logo-x', 'away-logo-x-num', state.awayTeam.logoX);
+                setValDual('away-logo-y', 'away-logo-y-num', state.awayTeam.logoY);
+                setCheck('away-logo-flip', state.awayTeam.logoFlip === -1);
+                setVal('away-mascot-text', state.awayTeam.mascotText);
+                setVal('away-mascot-font', state.awayTeam.mascotFont);
+                setVal('away-mascot-color', state.awayTeam.mascotColor);
+                setValDual('away-mascot-size', 'away-mascot-size-num', state.awayTeam.mascotSize);
+                setValDual('away-mascot-x', 'away-mascot-x-num', state.awayTeam.mascotX);
+                setValDual('away-mascot-y', 'away-mascot-y-num', state.awayTeam.mascotY);
+                setValDual('away-mascot-tilt', 'away-mascot-tilt-num', state.awayTeam.mascotTilt);
+                setVal('away-timeouts', state.awayTeam.timeouts);
+            }
+
+            // Home
+            if (state.homeTeam) {
+                setVal('home-name', state.homeTeam.name);
+                setVal('home-score-num', state.homeTeam.score);
+                setVal('home-color1', state.homeTeam.color1);
+                setVal('home-color2', state.homeTeam.color2);
+                setVal('home-font-color', state.homeTeam.fontColor);
+                setValDual('home-gradient-angle', 'home-gradient-angle-num', state.homeTeam.gradientAngle);
+                setVal('home-bg-image-url', state.homeTeam.bgImage);
+                setValDual('home-bg-opacity', 'home-bg-opacity-num', state.homeTeam.bgOpacity);
+                setVal('home-bg-blend', state.homeTeam.bgBlendMode || 'overlay');
+                setVal('home-logo', state.homeTeam.logo);
+                setValDual('home-logo-size', 'home-logo-size-num', state.homeTeam.logoSize);
+                setValDual('home-logo-tilt', 'home-logo-tilt-num', state.homeTeam.logoTilt);
+                setValDual('home-logo-x', 'home-logo-x-num', state.homeTeam.logoX);
+                setValDual('home-logo-y', 'home-logo-y-num', state.homeTeam.logoY);
+                setCheck('home-logo-flip', state.homeTeam.logoFlip === -1);
+                setVal('home-mascot-text', state.homeTeam.mascotText);
+                setVal('home-mascot-font', state.homeTeam.mascotFont);
+                setVal('home-mascot-color', state.homeTeam.mascotColor);
+                setValDual('home-mascot-size', 'home-mascot-size-num', state.homeTeam.mascotSize);
+                setValDual('home-mascot-x', 'home-mascot-x-num', state.homeTeam.mascotX);
+                setValDual('home-mascot-y', 'home-mascot-y-num', state.homeTeam.mascotY);
+                setValDual('home-mascot-tilt', 'home-mascot-tilt-num', state.homeTeam.mascotTilt);
+                setVal('home-timeouts', state.homeTeam.timeouts);
+            }
+
+            isSyncing = false;
+        });
+
+        function setVal(id, val) {
+            const el = document.getElementById(id);
+            if (el && val !== undefined) el.value = val;
+        }
+        function setCheck(id, val) {
+            const el = document.getElementById(id);
+            if (el && val !== undefined) el.checked = !!val;
+        }
+        function setValDual(id1, id2, val) {
+            if (val !== undefined) {
+                setVal(id1, val);
+                setVal(id2, val);
+            }
+        }
+
+        function togglePreview() {
+            const body = document.getElementById('preview-body');
+            const btn = document.getElementById('toggle-preview-btn');
+            if (body.style.display === 'none') {
+                body.style.display = 'block';
+                btn.innerText = 'Hide Preview';
+            } else {
+                body.style.display = 'none';
+                btn.innerText = 'Show Preview';
+            }
+        }
+
+        function toggleBugMaster() {
+            const bugBtn = document.getElementById('toggle-bug');
+            const isCurrentlyVisible = bugBtn.innerText.includes('HIDE');
+            if (isCurrentlyVisible) {
+                bugBtn.innerText = "SHOW BUG ON STREAM";
+                bugBtn.className = "master-toggle";
+            } else {
+                bugBtn.innerText = "HIDE BUG ON STREAM";
+                bugBtn.className = "master-toggle danger-btn";
+            }
+            emitState();
+        }
+
+        function syncDualLocal(sourceId, targetId) {
+            document.getElementById(targetId).value = document.getElementById(sourceId).value;
+        }
+
+        function adjustScore(team, points) {
+            const field = document.getElementById(`${team}-score-num`);
+            field.value = Math.max(0, parseInt(field.value || 0) + points);
+            emitState();
+        }
+
+        function uploadImage(event, targetInputId) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById(targetInputId).value = e.target.result;
+                emitState();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function uploadCustomFont(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const fontName = file.name.split('.')[0].replace(/[^a-zA-Z0-9]/g, '_');
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (!state.customFonts) state.customFonts = [];
+                state.customFonts.push({ name: fontName, data: e.target.result });
+                
+                document.querySelectorAll('.font-select').forEach(select => {
+                    const opt = document.createElement('option');
+                    opt.value = fontName;
+                    opt.innerText = `Custom: ${fontName}`;
+                    select.appendChild(opt);
+                });
+
+                emitState();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function startClock() { socket.emit('startClock'); }
+        function stopClock() { socket.emit('stopClock'); }
+        function setCustomClock() {
+            const m = parseInt(document.getElementById('clock-min').value) || 0;
+            const s = parseInt(document.getElementById('clock-sec').value) || 0;
+            socket.emit('setClockSeconds', (m * 60) + s);
+        }
+
+        function exportSettings() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `scorebug-config-${Date.now()}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importSettings(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedState = JSON.parse(e.target.result);
+                    state = importedState;
+                    socket.emit('updateState', state);
+                } catch (err) {
+                    alert('Invalid JSON settings file!');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function emitState() {
+            if (isSyncing) return;
+
+            state.fontFamily = document.getElementById('global-font').value;
+            state.quarter = document.getElementById('quarter').value;
+            state.down = document.getElementById('down').value;
+            state.distance = document.getElementById('distance').value;
+
+            state.visibility = {
+                bug: document.getElementById('toggle-bug').innerText.includes('HIDE'),
+                clock: document.getElementById('vis-clock').checked,
+                quarter: document.getElementById('vis-quarter').checked,
+                downDist: document.getElementById('vis-downDist').checked,
+                awayLogo: document.getElementById('vis-awayLogo').checked,
+                awayName: document.getElementById('vis-awayName').checked,
+                awayMascot: document.getElementById('vis-awayMascot').checked,
+                awayScore: document.getElementById('vis-awayScore').checked,
+                awayTimeouts: document.getElementById('vis-awayTimeouts').checked,
+                homeLogo: document.getElementById('vis-homeLogo').checked,
+                homeName: document.getElementById('vis-homeName').checked,
+                homeMascot: document.getElementById('vis-homeMascot').checked,
+                homeScore: document.getElementById('vis-homeScore').checked,
+                homeTimeouts: document.getElementById('vis-homeTimeouts').checked
+            };
+
+            state.awayTeam = {
+                name: document.getElementById('away-name').value,
+                score: parseInt(document.getElementById('away-score-num').value) || 0,
+                color1: document.getElementById('away-color1').value,
+                color2: document.getElementById('away-color2').value,
+                fontColor: document.getElementById('away-font-color').value,
+                gradientAngle: parseFloat(document.getElementById('away-gradient-angle').value) || 180,
+                bgImage: document.getElementById('away-bg-image-url').value,
+                bgOpacity: parseFloat(document.getElementById('away-bg-opacity').value) || 50,
+                bgBlendMode: document.getElementById('away-bg-blend').value,
+                logo: document.getElementById('away-logo').value,
+                logoSize: parseFloat(document.getElementById('away-logo-size').value) || 75,
+                logoTilt: parseFloat(document.getElementById('away-logo-tilt').value) || 0,
+                logoX: parseFloat(document.getElementById('away-logo-x').value) || -35,
+                logoY: parseFloat(document.getElementById('away-logo-y').value) || -12,
+                logoFlip: document.getElementById('away-logo-flip').checked ? -1 : 1,
+                mascotText: document.getElementById('away-mascot-text').value,
+                mascotFont: document.getElementById('away-mascot-font').value,
+                mascotColor: document.getElementById('away-mascot-color').value,
+                mascotSize: parseFloat(document.getElementById('away-mascot-size').value) || 18,
+                mascotX: parseFloat(document.getElementById('away-mascot-x').value) || -35,
+                mascotY: parseFloat(document.getElementById('away-mascot-y').value) || 55,
+                mascotTilt: parseFloat(document.getElementById('away-mascot-tilt').value) || 0,
+                timeouts: parseInt(document.getElementById('away-timeouts').value) || 0
+            };
+
+            state.homeTeam = {
+                name: document.getElementById('home-name').value,
+                score: parseInt(document.getElementById('home-score-num').value) || 0,
+                color1: document.getElementById('home-color1').value,
+                color2: document.getElementById('home-color2').value,
+                fontColor: document.getElementById('home-font-color').value,
+                gradientAngle: parseFloat(document.getElementById('home-gradient-angle').value) || 180,
+                bgImage: document.getElementById('home-bg-image-url').value,
+                bgOpacity: parseFloat(document.getElementById('home-bg-opacity').value) || 50,
+                bgBlendMode: document.getElementById('home-bg-blend').value,
+                logo: document.getElementById('home-logo').value,
+                logoSize: parseFloat(document.getElementById('home-logo-size').value) || 75,
+                logoTilt: parseFloat(document.getElementById('home-logo-tilt').value) || 0,
+                logoX: parseFloat(document.getElementById('home-logo-x').value) || -35,
+                logoY: parseFloat(document.getElementById('home-logo-y').value) || -12,
+                logoFlip: document.getElementById('home-logo-flip').checked ? -1 : 1,
+                mascotText: document.getElementById('home-mascot-text').value,
+                mascotFont: document.getElementById('home-mascot-font').value,
+                mascotColor: document.getElementById('home-mascot-color').value,
+                mascotSize: parseFloat(document.getElementById('home-mascot-size').value) || 18,
+                mascotX: parseFloat(document.getElementById('home-mascot-x').value) || -35,
+                mascotY: parseFloat(document.getElementById('home-mascot-y').value) || 55,
+                mascotTilt: parseFloat(document.getElementById('home-mascot-tilt').value) || 0,
+                timeouts: parseInt(document.getElementById('home-timeouts').value) || 0
+            };
+
+            socket.emit('updateState', state);
+        }
+    </script>
+</body>
+</html>

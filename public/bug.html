@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Scorebug</title>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Roboto:wght@700;900&family=Montserrat:wght@700;900&family=Anton&family=Oswald:wght@600;700&display=swap" rel="stylesheet">
+    <style id="custom-font-styles"></style>
+    <style>
+        :root {
+            --font-family: 'Teko', sans-serif;
+            
+            --away-c1: #D00000; --away-c2: #800000; --away-angle: 180deg; --away-font-color: #ffffff;
+            --away-bg-image: none; --away-bg-opacity: 0.5; --away-bg-blend: overlay;
+            --away-logo-size: 75px; --away-logo-tilt: 0deg; --away-logo-flip: 1; --away-logo-x: -35px; --away-logo-y: -12px;
+            --away-mascot-font: 'Teko', sans-serif; --away-mascot-color: #ffffff; --away-mascot-size: 18px; --away-mascot-x: -35px; --away-mascot-y: 55px; --away-mascot-tilt: 0deg;
+            
+            --home-c1: #7A0019; --home-c2: #333333; --home-angle: 180deg; --home-font-color: #ffffff;
+            --home-bg-image: none; --home-bg-opacity: 0.5; --home-bg-blend: overlay;
+            --home-logo-size: 75px; --home-logo-tilt: 0deg; --home-logo-flip: 1; --home-logo-x: -35px; --home-logo-y: -12px;
+            --home-mascot-font: 'Teko', sans-serif; --home-mascot-color: #FFCC33; --home-mascot-size: 18px; --home-mascot-x: -35px; --home-mascot-y: 55px; --home-mascot-tilt: 0deg;
+        }
+
+        body { 
+            margin: 0; overflow: hidden; background-color: rgba(0,0,0,0);
+            font-family: var(--font-family); transition: font-family 0.3s;
+        }
+        
+        #bug-container {
+            position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center;
+            transition: bottom 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease-in-out;
+        }
+        
+        .hidden { bottom: -120px !important; opacity: 0 !important; }
+        .elem-hidden { display: none !important; }
+        
+        .top-row { display: flex; height: 50px; position: relative; }
+        .team-section { display: flex; align-items: center; position: relative; }
+        
+        .team-bg { 
+            display: flex; align-items: center; height: 100%; 
+            border-top: 2px solid rgba(255,255,255,0.4); border-bottom: 2px solid rgba(0,0,0,0.6);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); position: relative; overflow: hidden;
+        }
+
+        .bg-texture-layer {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background-size: cover; background-position: center;
+            pointer-events: none; z-index: 1;
+        }
+        
+        #away-bg { 
+            background: linear-gradient(var(--away-angle), var(--away-c1), var(--away-c2));
+            padding: 0 15px 0 35px; color: var(--away-font-color);
+        }
+        #away-bg .bg-texture-layer {
+            background-image: var(--away-bg-image);
+            opacity: var(--away-bg-opacity);
+            mix-blend-mode: var(--away-bg-blend);
+        }
+        
+        #home-bg { 
+            background: linear-gradient(var(--home-angle), var(--home-c1), var(--home-c2));
+            padding: 0 35px 0 15px; color: var(--home-font-color);
+        }
+        #home-bg .bg-texture-layer {
+            background-image: var(--home-bg-image);
+            opacity: var(--home-bg-opacity);
+            mix-blend-mode: var(--home-bg-blend);
+        }
+        
+        .team-info, .score { position: relative; z-index: 2; }
+        .team-info { display: flex; flex-direction: column; justify-content: center; min-width: 130px; }
+        #away-bg .team-info { align-items: flex-start; margin-right: 20px; }
+        #home-bg .team-info { align-items: flex-end; margin-left: 20px; }
+        
+        .team-name { font-size: 28px; font-weight: 700; line-height: 0.9; letter-spacing: 1px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); }
+        .score { font-size: 46px; font-weight: 700; line-height: 0.8; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        
+        .timeouts { display: flex; gap: 4px; margin-top: 2px; }
+        .timeout { width: 14px; height: 4px; background: rgba(0,0,0,0.4); box-shadow: inset 0 1px 1px rgba(0,0,0,0.8); }
+        .timeout.on { background: #FFD700; box-shadow: 0 0 3px rgba(255, 215, 0, 0.6); }
+        
+        .team-logo { 
+            object-fit: contain; position: absolute; z-index: 10; 
+            filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.6)); 
+        }
+        #away-logo-img {
+            height: var(--away-logo-size); width: var(--away-logo-size);
+            left: var(--away-logo-x); top: var(--away-logo-y);
+            transform: rotate(var(--away-logo-tilt)) scaleX(var(--away-logo-flip));
+        }
+        #home-logo-img {
+            height: var(--home-logo-size); width: var(--home-logo-size);
+            right: var(--home-logo-x); top: var(--home-logo-y);
+            transform: rotate(var(--home-logo-tilt)) scaleX(var(--home-logo-flip));
+        }
+
+        .mascot-text {
+            position: absolute; z-index: 12; white-space: nowrap;
+            font-weight: 700; text-transform: uppercase;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,1);
+            pointer-events: none;
+        }
+        #away-mascot {
+            font-family: var(--away-mascot-font); color: var(--away-mascot-color);
+            font-size: var(--away-mascot-size); left: var(--away-mascot-x);
+            top: var(--away-mascot-y); transform: rotate(var(--away-mascot-tilt));
+        }
+        #home-mascot {
+            font-family: var(--home-mascot-font); color: var(--home-mascot-color);
+            font-size: var(--home-mascot-size); right: var(--home-mascot-x);
+            top: var(--home-mascot-y); transform: rotate(var(--home-mascot-tilt));
+        }
+        
+        .bottom-row { 
+            display: flex; justify-content: center; align-items: center; 
+            background: linear-gradient(to bottom, #2a2a2a, #111111);
+            color: white; padding: 2px 20px 0; font-size: 24px; font-weight: 600;
+            border: 1px solid rgba(255,255,255,0.2); border-top: none;
+            border-radius: 0 0 6px 6px; box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+            letter-spacing: 1px; width: 80%;
+        }
+        .bottom-row span { margin: 0 15px; text-shadow: 1px 1px 2px black; }
+    </style>
+</head>
+<body>
+    <div id="bug-container">
+        <div class="top-row">
+            <!-- Away Team -->
+            <div class="team-section">
+                <img src="" class="team-logo" id="away-logo-img">
+                <div class="mascot-text" id="away-mascot"></div>
+                <div class="team-bg" id="away-bg">
+                    <div class="bg-texture-layer"></div>
+                    <div class="team-info">
+                        <span class="team-name" id="away-name">AWAY</span>
+                        <div class="timeouts" id="away-timeouts-container"></div>
+                    </div>
+                    <span class="score" id="away-score">0</span>
+                </div>
+            </div>
+            
+            <!-- Home Team -->
+            <div class="team-section">
+                <div class="team-bg" id="home-bg">
+                    <div class="bg-texture-layer"></div>
+                    <span class="score" id="home-score">0</span>
+                    <div class="team-info">
+                        <span class="team-name" id="home-name">HOME</span>
+                        <div class="timeouts" id="home-timeouts-container"></div>
+                    </div>
+                </div>
+                <img src="" class="team-logo" id="home-logo-img">
+                <div class="mascot-text" id="home-mascot"></div>
+            </div>
+        </div>
+
+        <div class="bottom-row" id="bottom-row">
+            <span id="quarter">1ST</span>
+            <span id="clock">12:00</span>
+            <span id="down-dist">1ST & 10</span>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const root = document.documentElement;
+
+        function toggleElem(id, visible) {
+            const elem = document.getElementById(id);
+            if (elem) {
+                if (visible) elem.classList.remove('elem-hidden');
+                else elem.classList.add('elem-hidden');
+            }
+        }
+
+        function renderTimeouts(containerId, count) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const div = document.createElement('div');
+                div.className = 'timeout ' + (i < count ? 'on' : '');
+                container.appendChild(div);
+            }
+        }
+
+        socket.on('clockTick', (data) => {
+            if (data && data.clock) {
+                document.getElementById('clock').innerText = data.clock;
+            }
+        });
+
+        socket.on('stateUpdate', (state) => {
+            if (!state) return;
+
+            // Render Dynamic Custom Fonts
+            if (state.customFonts && state.customFonts.length > 0) {
+                let fontCss = '';
+                state.customFonts.forEach(font => {
+                    fontCss += `@font-face { font-family: '${font.name}'; src: url('${font.data}'); }\n`;
+                });
+                document.getElementById('custom-font-styles').innerHTML = fontCss;
+            }
+
+            // Text Values
+            if (state.awayTeam) {
+                document.getElementById('away-name').innerText = state.awayTeam.name || '';
+                document.getElementById('away-score').innerText = state.awayTeam.score !== undefined ? state.awayTeam.score : 0;
+                document.getElementById('away-mascot').innerText = state.awayTeam.mascotText || '';
+                document.getElementById('away-logo-img').src = state.awayTeam.logo || '';
+                renderTimeouts('away-timeouts-container', state.awayTeam.timeouts || 0);
+            }
+
+            if (state.homeTeam) {
+                document.getElementById('home-name').innerText = state.homeTeam.name || '';
+                document.getElementById('home-score').innerText = state.homeTeam.score !== undefined ? state.homeTeam.score : 0;
+                document.getElementById('home-mascot').innerText = state.homeTeam.mascotText || '';
+                document.getElementById('home-logo-img').src = state.homeTeam.logo || '';
+                renderTimeouts('home-timeouts-container', state.homeTeam.timeouts || 0);
+            }
+
+            if (state.clock) document.getElementById('clock').innerText = state.clock;
+            if (state.quarter) document.getElementById('quarter').innerText = state.quarter;
+            if (state.down && state.distance) document.getElementById('down-dist').innerText = `${state.down} & ${state.distance}`;
+
+            // Granular Element Visibilities
+            if (state.visibility) {
+                toggleElem('clock', state.visibility.clock);
+                toggleElem('quarter', state.visibility.quarter);
+                toggleElem('down-dist', state.visibility.downDist);
+                toggleElem('away-logo-img', state.visibility.awayLogo);
+                toggleElem('away-name', state.visibility.awayName);
+                toggleElem('away-mascot', state.visibility.awayMascot);
+                toggleElem('away-score', state.visibility.awayScore);
+                toggleElem('away-timeouts-container', state.visibility.awayTimeouts);
+                toggleElem('home-logo-img', state.visibility.homeLogo);
+                toggleElem('home-name', state.visibility.homeName);
+                toggleElem('home-mascot', state.visibility.homeMascot);
+                toggleElem('home-score', state.visibility.homeScore);
+                toggleElem('home-timeouts-container', state.visibility.homeTimeouts);
+
+                const showBottom = state.visibility.clock || state.visibility.quarter || state.visibility.downDist;
+                toggleElem('bottom-row', showBottom);
+            }
+
+            // Global Font
+            root.style.setProperty('--font-family', `'${state.fontFamily || 'Teko'}', sans-serif`);
+
+            // Away Team Styles & Textures
+            if (state.awayTeam) {
+                root.style.setProperty('--away-c1', state.awayTeam.color1 || '#D00000');
+                root.style.setProperty('--away-c2', state.awayTeam.color2 || '#800000');
+                root.style.setProperty('--away-angle', (state.awayTeam.gradientAngle || 180) + 'deg');
+                root.style.setProperty('--away-font-color', state.awayTeam.fontColor || '#ffffff');
+                root.style.setProperty('--away-bg-image', state.awayTeam.bgImage ? `url("${state.awayTeam.bgImage}")` : 'none');
+                root.style.setProperty('--away-bg-opacity', ((state.awayTeam.bgOpacity || 50) / 100));
+                root.style.setProperty('--away-bg-blend', state.awayTeam.bgBlendMode || 'overlay');
+
+                root.style.setProperty('--away-logo-size', (state.awayTeam.logoSize || 75) + 'px');
+                root.style.setProperty('--away-logo-tilt', (state.awayTeam.logoTilt || 0) + 'deg');
+                root.style.setProperty('--away-logo-flip', state.awayTeam.logoFlip || 1);
+                root.style.setProperty('--away-logo-x', (state.awayTeam.logoX || 0) + 'px');
+                root.style.setProperty('--away-logo-y', (state.awayTeam.logoY || 0) + 'px');
+
+                root.style.setProperty('--away-mascot-font', `'${state.awayTeam.mascotFont || 'Teko'}', sans-serif`);
+                root.style.setProperty('--away-mascot-color', state.awayTeam.mascotColor || '#ffffff');
+                root.style.setProperty('--away-mascot-size', (state.awayTeam.mascotSize || 18) + 'px');
+                root.style.setProperty('--away-mascot-x', (state.awayTeam.mascotX || 0) + 'px');
+                root.style.setProperty('--away-mascot-y', (state.awayTeam.mascotY || 0) + 'px');
+                root.style.setProperty('--away-mascot-tilt', (state.awayTeam.mascotTilt || 0) + 'deg');
+            }
+
+            // Home Team Styles & Textures
+            if (state.homeTeam) {
+                root.style.setProperty('--home-c1', state.homeTeam.color1 || '#7A0019');
+                root.style.setProperty('--home-c2', state.homeTeam.color2 || '#333333');
+                root.style.setProperty('--home-angle', (state.homeTeam.gradientAngle || 180) + 'deg');
+                root.style.setProperty('--home-font-color', state.homeTeam.fontColor || '#ffffff');
+                root.style.setProperty('--home-bg-image', state.homeTeam.bgImage ? `url("${state.homeTeam.bgImage}")` : 'none');
+                root.style.setProperty('--home-bg-opacity', ((state.homeTeam.bgOpacity || 50) / 100));
+                root.style.setProperty('--home-bg-blend', state.homeTeam.bgBlendMode || 'overlay');
+
+                root.style.setProperty('--home-logo-size', (state.homeTeam.logoSize || 75) + 'px');
+                root.style.setProperty('--home-logo-tilt', (state.homeTeam.logoTilt || 0) + 'deg');
+                root.style.setProperty('--home-logo-flip', state.homeTeam.logoFlip || 1);
+                root.style.setProperty('--home-logo-x', (state.homeTeam.logoX || 0) + 'px');
+                root.style.setProperty('--home-logo-y', (state.homeTeam.logoY || 0) + 'px');
+
+                root.style.setProperty('--home-mascot-font', `'${state.homeTeam.mascotFont || 'Teko'}', sans-serif`);
+                root.style.setProperty('--home-mascot-color', state.homeTeam.mascotColor || '#ffffff');
+                root.style.setProperty('--home-mascot-size', (state.homeTeam.mascotSize || 18) + 'px');
+                root.style.setProperty('--home-mascot-x', (state.homeTeam.mascotX || 0) + 'px');
+                root.style.setProperty('--home-mascot-y', (state.homeTeam.mascotY || 0) + 'px');
+                root.style.setProperty('--home-mascot-tilt', (state.homeTeam.mascotTilt || 0) + 'deg');
+            }
+
+            // Master Bug Visibility
+            const container = document.getElementById('bug-container');
+            if (state.visibility && state.visibility.bug) {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
